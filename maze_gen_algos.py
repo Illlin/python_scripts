@@ -1,5 +1,5 @@
 import numpy as np
-import pygame as pg
+import pyray
 import random
 import math
 
@@ -33,16 +33,6 @@ def lifelike_step(cells, birth, survive):
             else:
                 newgrid[y][x] = 0
     return newgrid
-
-
-def draw_cells(cells):
-    for y, line in enumerate(cells):
-        for x, cell in enumerate(line):
-            if cell == 1:
-                pg.draw.rect(screen, (255,255,255), (x*cell_size, y*cell_size, cell_size, cell_size))
-            if cell == 2:
-                pg.draw.rect(screen, (0,255,0), (x*cell_size, y*cell_size, cell_size, cell_size))
-
 
 def maze_to_cells(maze):
     vert_walls, horiz_walls = maze[0], maze[1]
@@ -165,33 +155,65 @@ def automata_dead_end_solve_step(cells):
             
 
 cell_size = 10
-maze_width, maze_height = 50, 25
-births, survives = code_str_to_lists("B5678/S45678")
+maze_width, maze_height = 50, 50
+tick_rate = 1/500
+rule = "B3678/S34678"
 
-maze = gen_recur_div_maze(maze_width, maze_height)
-cells = add_openings(maze_to_cells(maze))
+colours = {
+    0: pyray.Color(0,0,0,255),
+    1: pyray.Color(255,255,255,255),
+    2: pyray.Color(0,255,0,255)
+}
 
-pg.init()
-screen_width, screen_height = len(cells[0]) * cell_size, len(cells) * cell_size
-screen_size = [screen_width, screen_height]
-screen = pg.display.set_mode(screen_size)
-pg.display.set_caption("Automata stuff")
-clock = pg.time.Clock()
+def main():
+    # Generate Maze
+    maze = gen_recur_div_maze(maze_width, maze_height)
+    cells = add_openings(maze_to_cells(maze))
 
-done = False
+    # Screen size
+    screen_width, screen_height = len(cells[0]) * cell_size, len(cells) * cell_size
+    screen_size = [screen_width,screen_height]
+    grid_size = [len(cells[0]), len(cells)]
 
-while not done:
-    clock.tick(60)
+    # Init
+    pyray.init_window(*screen_size, "Life-like automata")
+
+    # Setup texture
+    cell_img = pyray.gen_image_color(*grid_size, pyray.WHITE)
+    cell_texture = pyray.load_texture_from_image(cell_img)
+    pyray.unload_image(cell_img)
+    pixels = pyray.ffi.new(f"Color [{grid_size[0]}][{grid_size[1]}]")
+
+    pyray.set_target_fps(500)
+    delta = 0
+
+    while not pyray.window_should_close():
+        # update cells
+        delta += pyray.get_frame_time()
+        if delta >= tick_rate:
+            while delta >= tick_rate:
+                cells = automata_dead_end_solve_step(cells)
+                #delta -= tick_rate
+                delta = 0 # Forces max 1 tick per frame
+
+            for y in range(grid_size[1]):
+                for x in range(grid_size[0]):
+                    pixels[y][x] = colours[cells[y][x]]
+                    
+
+            pyray.update_texture(cell_texture,pyray.ffi.addressof(pixels))
+
+        pyray.begin_drawing()
+
+        # Draw texture
+        pyray.clear_background(pyray.WHITE)
+        source = pyray.Rectangle(0, 0, grid_size[0], -grid_size[1]) # Flip Y
+        pyray.draw_texture_pro(cell_texture, source, pyray.Rectangle(0, 0, *screen_size), (0,0), 0, pyray.WHITE)
+
+        pyray.draw_fps(10, 10)
     
-    for event in pg.event.get():
-        if event.type == pg.QUIT:
-            done = True
+        pyray.end_drawing()
 
-    screen.fill((0,0,0))
 
-    draw_cells(cells)
-    cells = automata_dead_end_solve_step(cells)
-
-    pg.display.flip()
-
-pg.quit()
+if __name__ == "__main__":
+    main()
